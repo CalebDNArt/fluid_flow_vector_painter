@@ -1,0 +1,11 @@
+schema_version = "1.0.0"
+
+id = "fluid_flow_vertex_painter"
+version = "1.0.0"
+name = "Fluid Flow Vertex Painter"
+tagline = "Paint fluid flow vectors directly on a mesh with vertex painting"
+maintainer = "DNArt"
+type = "add-on"
+blender_version_min = "5.1.2"
+license = ["SPDX:GPL-3.0-or-later"]
+tags = ["Paint", "3D View", "Material"]
