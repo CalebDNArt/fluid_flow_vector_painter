@@ -18,7 +18,7 @@ from gpu_extras.batch import batch_for_shader
 
 class FlowPaintOperator(bpy.types.Operator):
     bl_idname = "paint.flow_vertex"
-    bl_label = "Flow Paint"
+    bl_label = "Fluid Flow Vertex Paint"
     bl_description = "Begin the flow paint operation\nClick and drag to paint\nHold SHIFT to blur\nHold CTRL to erase to neutral\nPress ESC or 'Stop Flow Painting' to stop operator"
     bl_options = {'REGISTER', 'UNDO'}
     
