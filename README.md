@@ -57,6 +57,9 @@ Alternatively, download the .zip file from the repository and go to **Edit > Pre
   * **Vector Color:** The color of the vectors. The color is multiplied by the flow strength at that vertex. Darker color = lower flow. I recommend using a high saturation, high value color
   * **NOTE: This visualization runs on the GPU, while most PCs can handle it, I would recommend against using it with extremely high resolution meshes.**
  
+### Quit Painting
+Press **ESC** or **"Stop Flow Painting"** to stop the operator. 
+ 
 ### IMPORTANT NOTE
 **The tool paints the colors in LINEAR colorspace and not sRGB colorspace. If you directly use this in a shader without converting the colorspace, the directions will be skewed.**
 
