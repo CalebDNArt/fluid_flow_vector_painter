@@ -1,4 +1,4 @@
-#Flow Map Painter. A free blender addon to paint fluid flow maps on meshes
+#Fluid Flow Vertex Painter. A free blender addon to paint fluid flow maps on meshes using vertex paint
 #Copyright (C) 2026 DNArt
 
 #This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -113,9 +113,9 @@ class FlowPaintOperator(bpy.types.Operator):
                 type='FLOAT_COLOR',
                 domain='POINT'
             )
-            
+            b_val = 1.0 if context.scene.invert_b else 0.0
             for datum in self.color_layer.data:
-                datum.color = (0.5, 0.5, 0.0, 1.0)
+                datum.color = (0.5, 0.5, b_val, 1.0)
         
         mw = self.obj.matrix_world
         normal_matrix = mw.to_3x3()        
@@ -526,7 +526,7 @@ class FlowPaintSmoothOperator(bpy.types.Operator):
                 o_x = ((1.0 - orig_color[0]) * 2.0) - 1.0 if context.scene.invert_r else (orig_color[0] * 2.0) - 1.0
                 o_y = ((1.0 - orig_color[1]) * 2.0) - 1.0 if context.scene.invert_g else (orig_color[1] * 2.0) - 1.0
                 orig_dir = Vector((o_x, o_y))
-                orig_strength = orig_color[2]
+                orig_strength = (1.0 - orig_color[2]) if context.scene.invert_b else orig_color[2]
 
                 vec_sum = orig_dir.copy()
                 strength_sum = orig_strength
@@ -538,7 +538,7 @@ class FlowPaintSmoothOperator(bpy.types.Operator):
                     n_y = ((1.0 - n_color[1]) * 2.0) - 1.0 if context.scene.invert_g else (n_color[1] * 2.0) - 1.0
                     n_dir = Vector((n_x, n_y))
                     vec_sum += n_dir
-                    strength_sum += n_color[2]
+                    strength_sum += (1.0 - n_color[2]) if context.scene.invert_b else n_color[2]
                     count += 1
 
                 avg_dir = vec_sum / count
@@ -583,22 +583,20 @@ class FlowPaintResetOperator(bpy.types.Operator):
         if not color_layer:
             self.report({'ERROR'}, "No active color attribute found.")
             return {'CANCELLED'}
-
+        
+        b_val = 1.0 if context.scene.invert_b else 0.0
         for datum in color_layer.data:
-            if context.scene.invert_b:
-                datum.color = (0.5, 0.5, 0.0, 1.0)
-            else:
-                datum.color = (0.5, 0.5, 1.0, 1.0)
+            datum.color = (0.5, 0.5, b_val, 1.0)
             
         mesh.update()
         return {'FINISHED'}
 
 class FLOWPAINT_PT_panel(bpy.types.Panel):
-    bl_label = "Flow Paint"
+    bl_label = "Fluid Flow Vertex Paint"
     bl_idname = "FLOWPAINT_PT_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Flow Paint'
+    bl_category = 'Fluid Flow Vertex Paint'
 
     def draw(self, context):
         layout = self.layout
@@ -629,9 +627,10 @@ class FLOWPAINT_PT_panel(bpy.types.Panel):
         row = box.row(align = True)
         row.prop(scene, "flow_brush_size", slider = True)
         row.prop(scene, "flow_brush_size_pressure", toggle = True, icon = "STYLUS_PRESSURE")
-        row = box.row(align = True)
-        row.prop(scene, "flow_brush_strength")
-        row.prop(scene, "flow_brush_strength_pressure", toggle = True, icon = "STYLUS_PRESSURE")
+        if scene.brush_b:
+            row = box.row(align = True)
+            row.prop(scene, "flow_brush_strength")
+            row.prop(scene, "flow_brush_strength_pressure", toggle = True, icon = "STYLUS_PRESSURE")
         row = box.row(align = True)
         row.prop(scene, "flow_brush_opacity")
         row.prop(scene, "flow_brush_opacity_pressure", toggle = True, icon = "STYLUS_PRESSURE")
