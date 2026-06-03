@@ -1,7 +1,7 @@
 # Fluid Flow Vertex Painter
 A free Blender extension for painting fluid flow maps directly onto meshes using vertex paint.
-<img width="1920" height="1009" alt="screen" src="https://github.com/user-attachments/assets/c6db04fa-605b-4ba1-919a-881adce45b54" />
-https://github.com/user-attachments/assets/46f83a2d-3228-4897-8b5e-a2e1dd7dc821
+<img width="1920" height="1009" alt="screen" src="https://github.com/user-attachments/assets/7e343b5c-e952-440c-9b74-6a94a7a75ca0" />
+<img width="800" height="450" alt="ezgif-466748588f5c9149" src="https://github.com/user-attachments/assets/f5bf7831-7578-48c1-b6a5-cb7af1b25265" />
 ## Features
 
 * Paint fluid flow vectors directly onto a mesh using vertex paint by tracking cursor direction.
