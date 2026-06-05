@@ -32,7 +32,10 @@ class FlowPaintOperator(bpy.types.Operator):
         
         scene = context.scene
         
-        radius = scene.flow_brush_size if not scene.flow_brush_size_pressure else scene.flow_brush_size * self.pressure
+        ui_scale = context.preferences.system.pixel_size
+        base_radius = (scene.flow_brush_size / 2.0) * ui_scale
+        
+        radius = base_radius if not scene.flow_brush_size_pressure else base_radius * self.pressure
         hardness = scene.flow_brush_hardness
         core_radius = radius * hardness
         
@@ -87,9 +90,20 @@ class FlowPaintOperator(bpy.types.Operator):
             if area.type == "VIEW_3D":
                 area.tag_redraw()
                 
+        if  hasattr(self, 'obj') and self.obj:
+            self.obj.show_wire = self.original_show_wire
+            self.obj.show_all_edges = self.original_show_all_edges 
+                
         if getattr(self, 'original_mode', None) and context.active_object:
             try:
                 bpy.ops.object.mode_set(mode=self.original_mode)
+                for area in context.screen.areas:
+                    if area.type == 'VIEW_3D':
+                        for space in area.spaces:
+                            if space.type == 'VIEW_3D':
+                                space.shading.light = self.original_light
+                                space.shading.type = self.original_type
+                            space.shading.color_type = self.original_color
             except Exception as e:
                 print(f"Could not restore mode: {e}")
 
@@ -135,14 +149,31 @@ class FlowPaintOperator(bpy.types.Operator):
             self.world_positions[i] = world_pos
             self.world_normals[i] = world_normal
             
-            self.kd.insert(v.co, i)
+            self.kd.insert(world_pos, i)
         self.kd.balance()
         
         self.original_mode = None
         
         if context.active_object:
             self.original_mode = bpy.context.object.mode
-        bpy.ops.object.mode_set(mode="VERTEX_PAINT")
+        bpy.ops.object.mode_set(mode="OBJECT")
+        
+        self.original_show_wire = self.obj.show_wire
+        self.original_show_all_edges = self.obj.show_all_edges
+        
+        self.obj.show_wire = True
+        self.obj.show_all_edges = True
+        
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        self.original_light = space.shading.light
+                        space.shading.light = 'FLAT'
+                        self.original_type = space.shading.type
+                        space.shading.type = 'SOLID'
+                        self.original_color = space.shading.color_type
+                        space.shading.color_type = 'VERTEX'
 
         self.prev_mouse = Vector((event.mouse_region_x, event.mouse_region_y))
         self.mouse_pos = self.prev_mouse
@@ -194,8 +225,10 @@ class FlowPaintOperator(bpy.types.Operator):
         if event.type == "MOUSEMOVE" and self.is_painting:
 
             scene = context.scene
+            ui_scale = context.preferences.system.pixel_size
+            base_radius = (scene.flow_brush_size / 2.0) * ui_scale
             self.pressure = getattr(event, "pressure", 1.0)
-            self.radius = scene.flow_brush_size if not scene.flow_brush_size_pressure else scene.flow_brush_size * self.pressure
+            self.radius = base_radius if not scene.flow_brush_size_pressure else base_radius * self.pressure
             self.strength_value = scene.flow_brush_strength if not scene.flow_brush_strength_pressure else scene.flow_brush_strength * self.pressure
             self.opacity = scene.flow_brush_opacity if not scene.flow_brush_opacity_pressure else scene.flow_brush_opacity * self.pressure
             self.hardness = scene.flow_brush_hardness if not scene.flow_brush_hardness_pressure else scene.flow_brush_hardness * self.pressure
@@ -246,15 +279,11 @@ class FlowPaintOperator(bpy.types.Operator):
         rv3d = context.space_data.region_3d
 
         edge_pos = mouse_pos + Vector((self.radius, 0))
+        edge_world = view3d_utils.region_2d_to_location_3d(region, rv3d, edge_pos, hit_location)
 
-        edge_world = view3d_utils.region_2d_to_location_3d(
-            region,
-            rv3d,
-            edge_pos,
-            hit_location
-        )
-
-        return (edge_world - hit_location).length
+        if edge_world:
+            return (edge_world - hit_location).length
+        return 0.001
     
     def paint_vertices(self, context, mouse_pos, r, g, erase=False):
         mesh = self.obj.data
@@ -286,43 +315,45 @@ class FlowPaintOperator(bpy.types.Operator):
         if not success:
             return
         
-        world_radius = self.get_brush_world_radius(
-            context,
-            mouse_pos,
-            location
-        )
+        world_radius = self.get_brush_world_radius(context, mouse_pos, location)
 
-        core_radius = world_radius * self.hardness
-
-        verts = self.kd.find_range(
-            location,
-            world_radius
-        )
+        search_radius = world_radius * 1.5
+        verts = self.kd.find_range(location, search_radius)
         
+        if len(verts) < 100:
+            verts = self.kd.find_n(location, 100)
+        
+        core_pixel_radius = self.radius * self.hardness
 
-        for world_pos, vert_index, dist in verts:
-            offset = world_pos - location
+        for world_pos, vert_index, _ in verts:
             
-            if offset.dot(normal) < 0 and context.scene.surface_side_filter:
+            screen_pos = view3d_utils.location_3d_to_region_2d(region, rv3d, world_pos)
+            
+            if screen_pos is None:
+                continue 
+                
+            pixel_dist = (screen_pos - mouse_pos).length
+            
+            if pixel_dist > self.radius:
+                continue
+
+            offset = world_pos - location
+            depth_tolerance = world_radius * 0.5 
+            
+            if offset.dot(normal) < -depth_tolerance and context.scene.surface_side_filter:
                 continue
                 
             vert_normal = self.world_normals[vert_index]
-            
             if vert_normal.dot(normal) < math.cos(context.scene.normal_filter_angle * (math.pi / 180.0)) and context.scene.normal_filter:
                 continue    
                 
-            if dist <= core_radius:
+            if pixel_dist <= core_pixel_radius:
                 falloff = 1.0
             else:
-
-                if world_radius == core_radius:
+                if self.radius == core_pixel_radius:
                     falloff = 1.0
                 else:
-                    falloff = 1.0 - (
-                        (dist - core_radius)
-                        / (world_radius - core_radius)
-                    )
-
+                    falloff = 1.0 - ((pixel_dist - core_pixel_radius) / (self.radius - core_pixel_radius))
                     falloff *= falloff
 
             color = color_layer.data[vert_index].color
@@ -390,46 +421,46 @@ class FlowPaintOperator(bpy.types.Operator):
         if not success:
             return
 
-        world_radius = self.get_brush_world_radius(
-            context,
-            mouse_pos,
-            location
-        )
+        world_radius = self.get_brush_world_radius(context, mouse_pos, location)
 
-        core_radius = world_radius * self.hardness
-
-        verts = self.kd.find_range(
-            location,
-            world_radius
-        )
+        search_radius = world_radius * 1.5
+        verts = self.kd.find_range(location, search_radius)
+        
+        if len(verts) < 100:
+            verts = self.kd.find_n(location, 100)
+        
+        core_pixel_radius = self.radius * self.hardness
 
         verts_in_radius = []
         avg_color = Vector((0.0, 0.0, 0.0))
         total_weight = 0.0
 
-        for world_pos, vert_index, dist in verts:
-            offset = world_pos - location
+        for world_pos, vert_index, _ in verts:
+            
+            screen_pos = view3d_utils.location_3d_to_region_2d(region, rv3d, world_pos)
+            if screen_pos is None:
+                continue
+                
+            pixel_dist = (screen_pos - mouse_pos).length
+            if pixel_dist > self.radius:
+                continue
 
-            if offset.dot(normal) < 0 and context.scene.surface_side_filter:
+            offset = world_pos - location
+            depth_tolerance = world_radius * 0.5 
+            if offset.dot(normal) < -depth_tolerance and context.scene.surface_side_filter:
                 continue
 
             vert_normal = self.world_normals[vert_index]
-
             if vert_normal.dot(normal) < math.cos(context.scene.normal_filter_angle * (math.pi / 180)) and context.scene.normal_filter:
                 continue
             
-            if dist <= core_radius:
+            if pixel_dist <= core_pixel_radius:
                 falloff = 1.0
             else:
-
-                if world_radius == core_radius:
+                if self.radius == core_pixel_radius:
                     falloff = 1.0
                 else:
-                    falloff = 1.0 - (
-                        (dist - core_radius)
-                        / (world_radius - core_radius)
-                    )
-
+                    falloff = 1.0 - ((pixel_dist - core_pixel_radius) / (self.radius - core_pixel_radius))
                     falloff *= falloff
 
             weight = falloff * self.opacity
@@ -611,13 +642,14 @@ class FLOWPAINT_PT_panel(bpy.types.Panel):
             row.prop(scene, "invert_g", toggle=True)
             row.prop(scene, "invert_b", toggle=True)       
             box.operator("paint.flow_reset", text = "Fill Neutral", icon = "X")
-            box.prop(scene, "surface_side_filter", toggle=True)
-            row = box.row(align=True)
-            row.prop(scene, "normal_filter", toggle=True)
-            if scene.normal_filter:
-                row.prop(scene, "normal_filter_angle", slider=True)
+            #box.prop(scene, "surface_side_filter", toggle=True)
+            #row = box.row(align=True)
+            #row.prop(scene, "normal_filter", toggle=True)
+            #if scene.normal_filter:
+            #    row.prop(scene, "normal_filter_angle", slider=True)
         else:
             box.operator("paint.flow_vertex", text="Stop Flow Painting", icon="CANCEL", depress=True)
+            box.operator("paint.flow_reset", text = "Fill Neutral", icon = "X")
         
         #Brush
         layout.separator()
@@ -762,19 +794,29 @@ def draw_flow_vectors():
     batch.draw(shader)
     gpu.state.blend_set('NONE')
 
+def update_flow_vectors_display(self, context):
+    global draw_handler
+    if self.flow_show_vectors:
+        if draw_handler is None:
+            draw_handler = bpy.types.SpaceView3D.draw_handler_add(draw_flow_vectors, (), "WINDOW", "POST_VIEW")
+    else:
+        if draw_handler is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(draw_handler, "WINDOW")
+            draw_handler = None
+
 def register():
     bpy.types.Scene.is_flow_painting = bpy.props.BoolProperty(default=False)
     
     bpy.types.Scene.surface_side_filter = bpy.props.BoolProperty(
         name="Surface-Side Filter",
         description="Filter the painting so that any verts hit must be on the same side as visible to the camera\nPrevents paint-through on 3D meshes",
-        default=True
+        default=False
     )
     
     bpy.types.Scene.normal_filter = bpy.props.BoolProperty(
         name="Normal Filter",
         description="Filter the painting so that the normal must be within a certain angle of the cameras view ray\nPrevents painting over edges",
-        default=True
+        default=False
     )
     
     bpy.types.Scene.normal_filter_angle = bpy.props.FloatProperty(
@@ -875,7 +917,8 @@ def register():
     bpy.types.Scene.flow_show_vectors = bpy.props.BoolProperty(
         name = "Show Vectors",
         description = "Draw the flow vectors on the mesh",
-        default = False
+        default = False,
+        update = update_flow_vectors_display
     )
     
     bpy.types.Scene.flow_vector_length = bpy.props.FloatProperty(
@@ -932,10 +975,6 @@ def register():
     
     for c in classes:
         bpy.utils.register_class(c)
-        
-    global draw_handler
-    if draw_handler is None:
-        draw_handler = bpy.types.SpaceView3D.draw_handler_add(draw_flow_vectors, (), "WINDOW", "POST_VIEW")
 
 def unregister():
     del bpy.types.Scene.is_flow_painting
