@@ -26,7 +26,7 @@ Alternatively, download the .zip file from the repository and go to **Edit > Pre
 5. Set the channel inversion settings appropriate for your workflow.
 6. Select the mesh you want to paint. You can be in any mode, the tool will force you into object mode and return to the original mode when terminated. The view drawing settings will automatically change to flat shading with wireframe. The settings will revert when the tool is disabled
 7. Change to an orthographic axis view (Looking down X, Y, or Z). The direction painted is relative to the direction the mouse moves on the screen. If you rotate the camera while painting the directions painted will change.
-8. Click **"Start Flow Painting"**. The mesh will be filed with (0.5, 0.5, 0.0/1.0 depending on if the blue channel is inverted) this defaults to zero flow anywhere on the mesh.
+8. Click **"Start Flow Painting"**. The mesh will be filled with (0.5, 0.5, 0.0/1.0 depending on if the blue channel is inverted) this defaults to zero flow anywhere on the mesh.
 
 ## Using the Tool
 ### Brush
