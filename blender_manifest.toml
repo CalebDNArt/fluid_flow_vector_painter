@@ -8,4 +8,4 @@ maintainer = "DNArt"
 type = "add-on"
 blender_version_min = "5.1.2"
 license = ["SPDX:GPL-3.0-or-later"]
-tags = ["Paint", "3D View", "Material"]
+tags = ["Paint"]
